@@ -1,0 +1,27 @@
+import requests
+import time
+
+webhook_url = ""
+
+def spam_35_everyone_here(times=500, delay=0.01):
+    # Create message with 35 @everyone and 35 @here mentions
+    content = ("@everyone " * 35 + "@here " * 35).strip() + "Message here"
+    data = {
+        "content": content
+        # No allowed_mentions to avoid API errors
+    }
+
+    for i in range(times):
+        response = requests.post(webhook_url, json=data)
+        if response.status_code == 204:
+            print(f"Sent message #{i + 1}")
+        elif response.status_code == 429:
+            retry_after = response.json().get("retry_after", 1)
+            print(f"Rate limited. Sleeping for {retry_after} seconds.")
+            time.sleep(retry_after)
+            continue
+        else:
+            print(f"Failed to send message #{i + 1}: {response.status_code} {response.text}")
+        time.sleep(delay)
+
+spam_35_everyone_here()
