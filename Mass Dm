@@ -1,2 +1,76 @@
-dm person (id optional)
-dm all
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""               # Trigger word to start the mass DM
+DM_ALL = True                     # True = DM everyone in server
+DM_ID = None                       # Optional: DM only a specific user ID
+MESSAGE = "test DM."  # Message to send
+REPEAT = False                     # True = keep sending repeatedly
+BATCH = 5                          # Users per batch (for repeat)
+BATCH_DELAY = 3                     # Seconds between batches (for repeat)
+GUILD_ID = 123456789012345678      # Server to DM in
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def send_dm(member):
+    try:
+        await member.send(MESSAGE)
+        print(f"Sent DM to {member.name}")
+    except discord.Forbidden:
+        print(f"Cannot DM {member.name}")
+    except discord.HTTPException as e:
+        print(f"Failed to DM {member.name}: {e}")
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    # Check for trigger
+    if message.content.lower().strip() != TRIGGER.lower():
+        return
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Bot is not in the specified guild.")
+        return
+
+    # Decide who to DM
+    members_to_dm = []
+    if DM_ALL:
+        members_to_dm = [m for m in guild.members if not m.bot]
+    elif DM_ID:
+        member = guild.get_member(DM_ID)
+        if member:
+            members_to_dm = [member]
+
+    if not members_to_dm:
+        print("No members to DM.")
+        return
+
+    # Function to handle batches & repeat
+    async def dm_loop():
+        while True:
+            for i in range(0, len(members_to_dm), BATCH):
+                batch = members_to_dm[i:i+BATCH]
+                tasks = [send_dm(m) for m in batch]
+                await asyncio.gather(*tasks)
+                await asyncio.sleep(BATCH_DELAY)
+            if not REPEAT:
+                break
+
+    bot.loop.create_task(dm_loop())
+
+bot.run("YOUR_BOT_TOKEN_HERE")
