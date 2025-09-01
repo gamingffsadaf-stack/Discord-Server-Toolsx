@@ -1,3 +1,73 @@
-server name:
-server banned:
-server pfp:
+import discord
+from discord.ext import commands
+import aiohttp
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""       # Trigger command to apply changes
+SERVER_NAME = ""  # New server name
+SERVER_PFP = None               # URL of server icon image (optional)
+SERVER_BAN = False              # True = delete server
+GUILD_ID = 123456789012345678   # Your server ID
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.messages = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def change_server(guild):
+    # Change server name
+    if SERVER_NAME:
+        try:
+            await guild.edit(name=SERVER_NAME)
+        except discord.Forbidden:
+            print("Bot does not have permission to change server name.")
+        except discord.HTTPException as e:
+            print(f"Failed to change server name: {e}")
+
+    # Change server icon
+    if SERVER_PFP:
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(SERVER_PFP) as resp:
+                    if resp.status == 200:
+                        icon_bytes = await resp.read()
+                        await guild.edit(icon=icon_bytes)
+        except discord.Forbidden:
+            print("Bot does not have permission to change server icon.")
+        except discord.HTTPException as e:
+            print(f"Failed to change server icon: {e}")
+
+    # Delete server (ban/delete)
+    if SERVER_BAN:
+        try:
+            await guild.delete()
+        except discord.Forbidden:
+            print("Bot does not have permission to delete the server.")
+        except discord.HTTPException as e:
+            print(f"Failed to delete server: {e}")
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() != TRIGGER.lower():
+        return
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Bot is not in the specified guild.")
+        return
+
+    await change_server(guild)
+
+bot.run("YOUR_BOT_TOKEN_HERE")
