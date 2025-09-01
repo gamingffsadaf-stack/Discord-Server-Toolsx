@@ -1,1 +1,52 @@
-respond to message
+import discord
+from discord.ext import commands
+
+# ---------- CONFIG ----------
+WORD_TRIGGER = test              # Example: "hello" (responds if this word appears)
+SENTENCE_TRIGGER = hey          # Example: "how are you?" (responds if message exactly matches)
+REPLY = True                     # True = reply to message, False = just send in channel
+RESPONSE = ""          # Message bot will send
+GUILD_ID = 123456789012345678    # Optional: restrict to a specific server
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.messages = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if GUILD_ID and message.guild.id != GUILD_ID:
+        return
+
+    respond = False
+
+    # Check word trigger
+    if WORD_TRIGGER and WORD_TRIGGER.lower() in message.content.lower():
+        respond = True
+
+    # Check sentence trigger
+    if SENTENCE_TRIGGER and message.content.lower().strip() == SENTENCE_TRIGGER.lower():
+        respond = True
+
+    if respond:
+        try:
+            if REPLY:
+                await message.reply(RESPONSE)
+            else:
+                await message.channel.send(RESPONSE)
+        except discord.Forbidden:
+            print("Cannot send message in this channel.")
+        except discord.HTTPException as e:
+            print(f"Failed to send message: {e}")
+
+bot.run("YOUR_BOT_TOKEN_HERE")
