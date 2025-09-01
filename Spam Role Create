@@ -1,0 +1,101 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""                # Trigger word to start
+ROLE_NAME = ""              # Base name of roles
+ROLE_COUNT = 10              # Total roles to create 
+BATCH_SIZE = 5               # Roles per batch
+BATCH_DELAY = 3                # Seconds between batches
+COLOR = "00FFFF"               # Color hex code or name
+ASSIGN_TO_ID = None            # Optional: user or role ID to assign roles
+GUILD_ID = 12345678  # Replace with your server ID
+# ----------------------------
+
+# Intents
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True        # Required if assigning roles
+intents.message_content = True  # <-- Fix: enables reading messages
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+def parse_color(color_str):
+    """Convert hex string or name to discord.Color"""
+    try:
+        if color_str.startswith("#"):
+            return discord.Color(int(color_str[1:], 16))
+        else:
+            return getattr(discord.Color, color_str.lower())()
+    except:
+        return discord.Color.default()
+
+async def create_role(guild, name, color):
+    try:
+        role = await guild.create_role(name=name, color=color)
+        print(f"Created role: {name}")
+        return role
+    except discord.Forbidden:
+        print(f"No permission to create role: {name}")
+        return None
+    except discord.HTTPException as e:
+        print(f"Failed to create role {name}: {e}")
+        return None
+
+async def assign_role(member_or_role, role):
+    try:
+        if isinstance(member_or_role, discord.Member):
+            await member_or_role.add_roles(role)
+    except discord.Forbidden:
+        print(f"No permission to assign role {role.name}")
+    except discord.HTTPException as e:
+        print(f"Failed to assign role {role.name}: {e}")
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == TRIGGER.lower():
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("Bot is not in the specified guild.")
+            return
+
+        color = parse_color(COLOR)
+        tasks = []
+
+        for i in range(ROLE_COUNT):
+            role_name = f"{ROLE_NAME}-{i+1}"
+            tasks.append(create_role(guild, role_name, color))
+
+            # Run in batches
+            if len(tasks) >= BATCH_SIZE:
+                created_roles = await asyncio.gather(*tasks)
+                tasks.clear()
+
+                if ASSIGN_TO_ID:
+                    member_or_role = guild.get_member(ASSIGN_TO_ID) or guild.get_role(ASSIGN_TO_ID)
+                    if member_or_role:
+                        for role in created_roles:
+                            if role:
+                                await assign_role(member_or_role, role)
+
+                await asyncio.sleep(BATCH_DELAY)
+
+        # Handle leftover roles
+        if tasks:
+            created_roles = await asyncio.gather(*tasks)
+            if ASSIGN_TO_ID:
+                member_or_role = guild.get_member(ASSIGN_TO_ID) or guild.get_role(ASSIGN_TO_ID)
+                if member_or_role:
+                    for role in created_roles:
+                        if role:
+                            await assign_role(member_or_role, role)
+
+bot.run("Token_Here")
