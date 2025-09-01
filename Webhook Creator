@@ -3,12 +3,10 @@ from discord.ext import commands
 import asyncio
 
 # ---------- CONFIG ----------
-TRIGGER = "webhook"                 # Command to start
-WEBHOOK_NAME = "MyWebhook"          # Name of the webhook
-WEBHOOK_COUNT = 5                    # How many webhooks to create
-WEBHOOK_DELAY = 2                    # Delay between each creation (seconds)
-GUILD_ID = 123456789012345678        # Your server ID
-CHANNEL_ID = 987654321098765432      # The channel ID to create webhooks in
+TRIGGER = ""       # Command to trigger webhook creation
+WEBHOOK_NAME = ""      # Name of the webhook
+GUILD_ID = 12345678   # Your server ID
+CHANNEL_ID = 1234567890 # Channel to create the webhook in
 # ----------------------------
 
 intents = discord.Intents.default()
@@ -21,16 +19,16 @@ bot = commands.Bot(command_prefix="", intents=intents)
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-async def create_webhooks(channel):
-    for i in range(WEBHOOK_COUNT):
-        try:
-            webhook = await channel.create_webhook(name=f"{WEBHOOK_NAME}-{i+1}")
-            print(f"Created webhook: {webhook.name}")
-        except discord.Forbidden:
-            print(f"No permission to create webhook in {channel.name}")
-        except discord.HTTPException as e:
-            print(f"Failed to create webhook: {e}")
-        await asyncio.sleep(WEBHOOK_DELAY)
+async def create_webhook(channel, name):
+    try:
+        webhook = await channel.create_webhook(name=name)
+        print(f"Created webhook: {webhook.name}")
+        print(f"Webhook URL: {webhook.url}")  # This is your webhook URL
+        return webhook.url
+    except discord.Forbidden:
+        print(f"No permission to create webhook in {channel.name}")
+    except discord.HTTPException as e:
+        print(f"Failed to create webhook: {e}")
 
 @bot.event
 async def on_message(message):
@@ -48,6 +46,11 @@ async def on_message(message):
             print("Channel not found.")
             return
 
-        await create_webhooks(channel)
+        webhook_url = await create_webhook(channel, WEBHOOK_NAME)
+        if webhook_url:
+            try:
+                await message.author.send(f"Webhook created!\nURL: {webhook_url}")
+            except discord.Forbidden:
+                print("Couldn't DM the user.")
 
-bot.run("YOUR_BOT_TOKEN_HERE")
+bot.run("Webhook_Here")
