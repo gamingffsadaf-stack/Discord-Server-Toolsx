@@ -1,0 +1,82 @@
+import discord
+from discord.ext import commands
+import asyncio
+import random
+
+# ---------- CONFIG ----------
+TRIGGER = ""        # Trigger command to start batch ban
+MEMBER_ID = None            # Optional: ban this specific member ID
+BAN_ALL = True              # True = ban multiple members
+AMOUNT = 5                  # Total members to ban (ignored if MEMBER_ID is set)
+BATCH_AMOUNT = 2            # Members per batch
+BATCH_SPEED = 1.0           # Delay (seconds) between individual bans
+BATCH_DELAY = 3.0           # Delay (seconds) between batches
+GUILD_ID = 123456789012345678  # Your server ID
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True  # needed to access members
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+# ---- Core batch ban logic ----
+async def run_batch_ban(guild, channel):
+    # Ban a specific member by ID
+    if MEMBER_ID:
+        member = guild.get_member(MEMBER_ID)
+        if member:
+            try:
+                await member.ban(reason="Selected ban")
+                await channel.send(f"Banned {member.name}")
+            except discord.Forbidden:
+                await channel.send(f"No permission to ban {member.name}")
+            except discord.HTTPException:
+                await channel.send(f"Failed to ban {member.name}")
+        else:
+            await channel.send("Member not found.")
+        return
+
+    # Ban multiple members
+    if BAN_ALL:
+        members = [m for m in guild.members if not m.bot and m != bot.user]
+        total_to_ban = min(AMOUNT, len(members)) if AMOUNT else len(members)
+        to_ban = random.sample(members, total_to_ban)
+
+        for i in range(0, len(to_ban), BATCH_AMOUNT):
+            batch = to_ban[i:i+BATCH_AMOUNT]
+            await channel.send(f"Processing batch: {[m.name for m in batch]}")
+
+            for member in batch:
+                try:
+                    await member.ban(reason="Batch ban")
+                    await channel.send(f"Banned {member.name}")
+                except discord.Forbidden:
+                    await channel.send(f"No permission to ban {member.name}")
+                except discord.HTTPException:
+                    await channel.send(f"Failed to ban {member.name}")
+                await asyncio.sleep(BATCH_SPEED)
+
+            await asyncio.sleep(BATCH_DELAY)
+
+# ---- Trigger handling ----
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() != TRIGGER.lower():
+        return
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Bot is not in the specified guild.")
+        return
+
+    await run_batch_ban(guild, message.channel)
+
+bot.run("YOUR_BOT_TOKEN_HERE")
