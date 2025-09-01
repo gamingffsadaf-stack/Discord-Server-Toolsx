@@ -1,0 +1,64 @@
+import discord
+from discord.ext import commands, tasks
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""        # Trigger word to start deletion
+GUILD_ID = 123456789012345678     # Your server ID
+CHANNEL_NAME = None               # Optional: delete only channels with this name
+CHANNEL_ID = None                 # Optional: delete only a specific channel by ID
+BATCH_SIZE = 3                    # Channels deleted per batch
+BATCH_DELAY = 2                   # Seconds between batches
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def delete_channels():
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Bot is not in the specified guild.")
+        return
+
+    # Filter channels by name or ID
+    if CHANNEL_ID:
+        channels_to_delete = [guild.get_channel(CHANNEL_ID)]
+    elif CHANNEL_NAME:
+        channels_to_delete = [ch for ch in guild.channels if ch.name == CHANNEL_NAME]
+    else:
+        channels_to_delete = list(guild.channels)
+
+    tasks = []
+    for idx, channel in enumerate(channels_to_delete, 1):
+        if channel:
+            try:
+                await channel.delete(reason="Mass channel deletion")
+                print(f"Deleted channel: {channel.name}")
+            except discord.Forbidden:
+                print(f"No permission to delete channel: {channel.name}")
+            except discord.HTTPException as e:
+                print(f"Failed to delete {channel.name}: {e}")
+
+        # Batch delay
+        if idx % BATCH_SIZE == 0:
+            await asyncio.sleep(BATCH_DELAY)
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    # Trigger deletion
+    if message.content.lower().strip() == TRIGGER.lower():
+        bot.loop.create_task(delete_channels())
+
+bot.run(BOT_TOKEN)
