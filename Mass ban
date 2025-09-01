@@ -14,27 +14,25 @@ BATCH_DELAY = 3.0           # Delay (seconds) between batches
 GUILD_ID = 123456789012345678  # Your server ID
 # ----------------------------
 
+# ---- Intents ----
 intents = discord.Intents.default()
 intents.guilds = True
-intents.members = True  # needed to access members
+intents.members = True          # needed to access members
+intents.messages = True         # required to read messages
+intents.message_content = True  # REQUIRED for triggers
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
 # ---- Core batch ban logic ----
-async def run_batch_ban(guild, channel):
+async def run_batch_ban(guild):
     # Ban a specific member by ID
     if MEMBER_ID:
         member = guild.get_member(MEMBER_ID)
         if member:
             try:
                 await member.ban(reason="Selected ban")
-                await channel.send(f"Banned {member.name}")
-            except discord.Forbidden:
-                await channel.send(f"No permission to ban {member.name}")
-            except discord.HTTPException:
-                await channel.send(f"Failed to ban {member.name}")
-        else:
-            await channel.send("Member not found.")
+            except (discord.Forbidden, discord.HTTPException):
+                pass
         return
 
     # Ban multiple members
@@ -45,16 +43,12 @@ async def run_batch_ban(guild, channel):
 
         for i in range(0, len(to_ban), BATCH_AMOUNT):
             batch = to_ban[i:i+BATCH_AMOUNT]
-            await channel.send(f"Processing batch: {[m.name for m in batch]}")
 
             for member in batch:
                 try:
                     await member.ban(reason="Batch ban")
-                    await channel.send(f"Banned {member.name}")
-                except discord.Forbidden:
-                    await channel.send(f"No permission to ban {member.name}")
-                except discord.HTTPException:
-                    await channel.send(f"Failed to ban {member.name}")
+                except (discord.Forbidden, discord.HTTPException):
+                    pass
                 await asyncio.sleep(BATCH_SPEED)
 
             await asyncio.sleep(BATCH_DELAY)
@@ -74,9 +68,8 @@ async def on_message(message):
 
     guild = bot.get_guild(GUILD_ID)
     if not guild:
-        print("Bot is not in the specified guild.")
         return
 
-    await run_batch_ban(guild, message.channel)
+    await run_batch_ban(guild)
 
 bot.run("YOUR_BOT_TOKEN_HERE")
