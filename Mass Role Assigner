@@ -1,0 +1,64 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""         # Trigger word
+ASSIGN_TO_ID = None           # Optional: user ID to assign role to
+MASS_ASSIGN = False           # True to give role to all members
+ROLE_ID = 123456789012345678  # Role ID to assign
+GUILD_ID = 123456789098765 # Server ID
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def assign_role_to_member(member, role):
+    try:
+        await member.add_roles(role)
+        print(f"Gave role {role.name} to {member.name}")
+    except discord.Forbidden:
+        print(f"No permission to give role {role.name} to {member.name}")
+    except discord.HTTPException as e:
+        print(f"Failed to give role {role.name} to {member.name}: {e}")
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == TRIGGER.lower():
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("Bot is not in the specified guild.")
+            return
+
+        role = guild.get_role(ROLE_ID)
+        if not role:
+            print("Role not found.")
+            return
+
+        # Assign to a specific user
+        if ASSIGN_TO_ID:
+            member = guild.get_member(ASSIGN_TO_ID)
+            if member:
+                await assign_role_to_member(member, role)
+            else:
+                print("User not found.")
+
+        # Assign to all members
+        if MASS_ASSIGN:
+            for member in guild.members:
+                if member.bot:
+                    continue
+                await assign_role_to_member(member, role)
+                await asyncio.sleep(0.5)  # slight delay to avoid rate limits
+
+bot.run("YOUR_BOT_TOKEN_HERE")
