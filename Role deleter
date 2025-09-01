@@ -1,3 +1,77 @@
-mass delete 
-delete by Id:
-delete by name:
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""          # Trigger word to start role deletion
+MASS_DELETE = False                # True = delete all roles
+ROLE_IDS = []                      # List of role IDs to delete, e.g., [123456, 789012]
+ROLE_NAME = None                   # Optional: delete role by name
+GUILD_ID = 123456789012345678      # Your server ID
+
+BATCH_AMOUNT = 2                   # Number of roles to delete per batch
+BATCH_DELAY = 3                     # Seconds to wait between batches
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.messages = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def delete_roles(guild):
+    roles_to_delete = []
+
+    # Delete by multiple IDs
+    if ROLE_IDS:
+        for rid in ROLE_IDS:
+            role = guild.get_role(rid)
+            if role:
+                roles_to_delete.append(role)
+
+    # Delete by Name
+    elif ROLE_NAME:
+        role = discord.utils.get(guild.roles, name=ROLE_NAME)
+        if role:
+            roles_to_delete.append(role)
+
+    # Mass delete all roles (excluding @everyone)
+    elif MASS_DELETE:
+        roles_to_delete = [r for r in guild.roles if r != guild.default_role]
+
+    # Process deletion in batches
+    for i in range(0, len(roles_to_delete), BATCH_AMOUNT):
+        batch = roles_to_delete[i:i + BATCH_AMOUNT]
+        # Delete all roles in this batch
+        delete_tasks = [role.delete(reason="Role Deleter Script") for role in batch]
+        results = await asyncio.gather(*delete_tasks, return_exceptions=True)
+        # Handle results
+        for j, result in enumerate(results):
+            if isinstance(result, Exception):
+                print(f"Failed to delete {batch[j].name}: {result}")
+            else:
+                print(f"Deleted role: {batch[j].name}")
+        await asyncio.sleep(BATCH_DELAY)  # wait after each batch
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() != TRIGGER.lower():
+        return
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Bot is not in the specified guild.")
+        return
+
+    await delete_roles(guild)
+
+bot.run("YOUR_BOT_TOKEN_HERE")
