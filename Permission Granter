@@ -1,2 +1,112 @@
-role name:
-permission:
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""            # Trigger command to create/assign role
+ROLE_NAME = ""     # Name of the role
+ROLE_COLOR = 0x           # Hex color (Discord.py uses int, e.g., 0x1ABC9C)
+GIVE_TO = []                     # List of member IDs to give role to (e.g., [123456789, 987654321])
+GIVE_TO_EVERYONE = False         # True to give role to everyone in the server
+GUILD_ID = 123456789012345678    # Your server ID
+
+# Permissions (all Discord permissions)
+PERMISSIONS = {
+    "create_instant_invite": False,
+    "kick_members": False,
+    "ban_members": False,
+    "administrator": False,
+    "manage_channels": False,
+    "manage_guild": False,
+    "add_reactions": False,
+    "view_audit_log": False,
+    "priority_speaker": False,
+    "stream": False,
+    "view_channel": False,
+    "send_messages": False,
+    "send_tts_messages": False,
+    "manage_messages": False,
+    "embed_links": False,
+    "attach_files": False,
+    "read_message_history": False,
+    "mention_everyone": False,
+    "use_external_emojis": False,
+    "view_guild_insights": False,
+    "connect": False,
+    "speak": False,
+    "mute_members": False,
+    "deafen_members": False,
+    "move_members": False,
+    "use_voice_activation": False,
+    "change_nickname": False,
+    "manage_nicknames": False,
+    "manage_roles": False,
+    "manage_webhooks": False,
+    "manage_emojis": False,
+    "use_application_commands": False,
+    "request_to_speak": True,
+    "manage_events": False,
+    "manage_threads": False,
+    "create_public_threads": False,
+    "create_private_threads": False,
+    "use_external_stickers": False,
+    "send_messages_in_threads": False,
+    "start_embedded_activities": False
+}
+# ----------------------------
+
+# ---- Intents ----
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.messages = True
+intents.message_content = True  # REQUIRED for triggers
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+# ---- Core role logic ----
+async def create_and_assign_role(guild):
+    # Check if role already exists
+    role = discord.utils.get(guild.roles, name=ROLE_NAME)
+    if not role:
+        perms = discord.Permissions(**PERMISSIONS)
+        role = await guild.create_role(
+            name=ROLE_NAME,
+            color=discord.Color(ROLE_COLOR),
+            permissions=perms,
+            reason="Role created by role giver script"
+        )
+
+    # Assign role to specified members
+    members_to_assign = []
+    if GIVE_TO_EVERYONE:
+        members_to_assign = [m for m in guild.members if not m.bot]
+    elif GIVE_TO:
+        members_to_assign = [guild.get_member(m_id) for m_id in GIVE_TO if guild.get_member(m_id)]
+
+    for member in members_to_assign:
+        try:
+            await member.add_roles(role, reason="Role assigned by script")
+        except (discord.Forbidden, discord.HTTPException):
+            pass  # Silent failure if no permission
+
+# ---- Trigger handling ----
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() != TRIGGER.lower():
+        return
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        return
+
+    await create_and_assign_role(guild)
+
+bot.run("YOUR_BOT_TOKEN_HERE")
