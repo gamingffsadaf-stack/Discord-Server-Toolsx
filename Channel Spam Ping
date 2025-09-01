@@ -1,0 +1,55 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = "dih"                # Trigger word
+MESSAGE = "@everyone skid raid"  # Message to send
+SPAM_DELAY = 2                  # Seconds between each message
+CHANNEL_COUNT = 400              # How many channels to spam
+GUILD_ID = 1412093102910607532   # Replace with your server ID
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def spam_channel(channel):
+    while True:
+        try:
+            await channel.send(MESSAGE)
+            print(f"Sent message in {channel.name}")
+        except discord.Forbidden:
+            print(f"No permission to send in {channel.name}")
+            break
+        except discord.HTTPException as e:
+            print(f"Failed to send in {channel.name}: {e}")
+            await asyncio.sleep(2)
+            continue
+        await asyncio.sleep(SPAM_DELAY)
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == TRIGGER.lower():
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("Bot is not in the specified guild.")
+            return
+
+        # Limit channels to first CHANNEL_COUNT text channels
+        text_channels = [ch for ch in guild.text_channels][:CHANNEL_COUNT]
+
+        # Start infinite spam tasks for each channel
+        for channel in text_channels:
+            bot.loop.create_task(spam_channel(channel))
+
+bot.run("MTMzMzQ5MTIyNDMyMTA2NTA5NA.Gv5MPr.-OhTND8EaIB0LoNp44KMk6ywTORtHonWZHxZtw")
