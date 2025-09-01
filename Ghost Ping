@@ -1,0 +1,64 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""          # Trigger word to start the ghost ping
+DM_ALL = False                  # True = DM everyone in server
+TARGET_ID = None                # Optional: specific user ID
+PING_MESSAGE = ""           # Message content (can include @here or @everyone if you want)
+DELETE_DELAY = 0.5              # Seconds before deleting the message
+GUILD_ID = 123456789012345678   # Server to send ghost ping in
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def ghost_ping(member):
+    try:
+        msg = await member.send(PING_MESSAGE)
+        await asyncio.sleep(DELETE_DELAY)
+        await msg.delete()
+        print(f"Ghost ping sent to {member.name}")
+    except discord.Forbidden:
+        print(f"Cannot DM {member.name}")
+    except discord.HTTPException as e:
+        print(f"Failed to ghost ping {member.name}: {e}")
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() != TRIGGER.lower():
+        return
+
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("Bot is not in the specified guild.")
+        return
+
+    targets = []
+    if DM_ALL:
+        targets = [m for m in guild.members if not m.bot]
+    elif TARGET_ID:
+        member = guild.get_member(TARGET_ID)
+        if member:
+            targets = [member]
+
+    if not targets:
+        print("No targets to ghost ping.")
+        return
+
+    for member in targets:
+        bot.loop.create_task(ghost_ping(member))
+
+bot.run("YOUR_BOT_TOKEN_HERE")
