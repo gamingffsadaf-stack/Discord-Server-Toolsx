@@ -1,0 +1,44 @@
+import discord
+from discord.ext import commands
+
+# Intents
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True          # Needed to fetch members
+intents.message_content = True  # Needed to read messages
+
+# Bot setup
+bot = commands.Bot(command_prefix="", intents=intents)
+
+ROLE_ID = 1234  # Replace with your target role ID
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    # Ignore messages from bots
+    if message.author.bot:
+        return
+
+    # Trigger on exact message   below
+    if message.content.lower() == "":
+        role = message.guild.get_role(ROLE_ID)
+        if not role:
+            await message.author.send("Role not found in this server.")
+            return
+
+        perms = role.permissions
+        perms_list = [perm.replace("_", " ").title() for perm, value in perms if value]
+
+        dm_message = f"Hello {message.author.name}! Here are the permissions for role **{role.name}**:\n"
+        dm_message += "\n".join(perms_list) if perms_list else "This role has no permissions."
+
+        try:
+            await message.author.send(dm_message)
+        except discord.Forbidden:
+            print(f"Cannot DM {message.author}")
+
+# Paste the Bot Token here
+bot.run("")
