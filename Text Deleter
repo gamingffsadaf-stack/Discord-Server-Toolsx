@@ -1,0 +1,100 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# ==== CONFIG ====
+CONFIG = {
+    "trigger": "",               # Trigger to start deletion
+    "guild_id": 1234567890,  # Target server ID
+    "delete_in_channel": True,        # Delete in specified channels
+    "mass_delete": False,             # Delete all messages in all channels
+    "delete_message_id": None,        # Specific message ID to delete
+    "delete_user_id": None,           # Delete all messages from this user ID
+    "batch_amount": 10,               # Messages to delete per batch
+    "batch_delay": 2.0,               # Delay between batches in seconds
+    "ignored_channels": [],           # List of channel IDs to ignore
+    "exclude_messages": [],           # Words or sentences to not delete
+    "channels_to_delete": [],         # List of channel IDs to delete from (multiple selection)
+    "silent_mode": True,              # If True, only logs batch summary
+    "preview_mode": True              # If True, lists messages to delete before deleting
+}
+# =================
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.messages = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def delete_messages_in_channel(channel):
+    deleted_count = 0
+    messages_to_delete = []
+
+    async for message in channel.history(limit=None, oldest_first=False):
+        # Skip ignored users or excluded messages
+        if CONFIG["delete_user_id"] and message.author.id != CONFIG["delete_user_id"]:
+            continue
+        if CONFIG["exclude_messages"]:
+            if any(ex_msg in message.content for ex_msg in CONFIG["exclude_messages"]):
+                continue
+        if CONFIG["delete_message_id"]:
+            if message.id != CONFIG["delete_message_id"]:
+                continue
+
+        messages_to_delete.append(message)
+
+    if CONFIG["preview_mode"]:
+        print(f"⚠️ Preview: {len(messages_to_delete)} messages would be deleted in #{channel.name}")
+        return
+
+    for i, message in enumerate(messages_to_delete, 1):
+        try:
+            await message.delete()
+            deleted_count += 1
+        except discord.Forbidden:
+            if not CONFIG["silent_mode"]:
+                print(f"❌ Missing permissions to delete message ID {message.id} in #{channel.name}")
+        except discord.HTTPException as e:
+            if not CONFIG["silent_mode"]:
+                print(f"❌ Failed to delete message ID {message.id} in #{channel.name} | {e}")
+
+        # Batch control
+        if deleted_count % CONFIG["batch_amount"] == 0:
+            if not CONFIG["silent_mode"]:
+                print(f"⚡ Deleted {deleted_count} messages so far in #{channel.name}")
+            await asyncio.sleep(CONFIG["batch_delay"])
+
+    print(f"🎉 Finished deleting messages in #{channel.name}, total deleted: {deleted_count}")
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == CONFIG["trigger"].lower():
+        guild = bot.get_guild(CONFIG["guild_id"])
+        if not guild:
+            print("❌ Could not find the specified guild.")
+            return
+
+        # Determine channels to delete from
+        if CONFIG["mass_delete"]:
+            channels = [ch for ch in guild.text_channels if ch.id not in CONFIG["ignored_channels"]]
+        elif CONFIG["delete_in_channel"]:
+            channels = [guild.get_channel(ch_id) for ch_id in CONFIG["channels_to_delete"] if guild.get_channel(ch_id)]
+        else:
+            channels = []
+
+        if not channels:
+            print("⚠️ No channels selected for deletion.")
+            return
+
+        for channel in channels:
+            await delete_messages_in_channel(channel)
+
+bot.run("YOUR_BOT_TOKEN_HERE")
