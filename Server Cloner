@@ -1,5 +1,108 @@
-Clone Server name: True
-Clone channels: True
-Clone Pfp: True
-Trigger: 
-Clone Everything: False
+import discord
+from discord.ext import commands
+import asyncio
+
+# ==== CONFIG ====
+CONFIG = {
+    "trigger": "go",                 # Trigger word
+    "source_guild_id": 12345678,   # ID of the server to clone
+    "destination_guild_id": 987654321, # ID of the server to clone into
+    "clone_roles": True,
+    "clone_channels": True,
+    "clone_emojis": True,
+    "clone_stickers": False,            # Stickers often fail due to Nitro limits
+}
+# =================
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True  # Required for roles
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def clone_roles(source_guild, dest_guild):
+    for role in source_guild.roles:
+        if role.is_default():
+            continue
+        try:
+            await dest_guild.create_role(
+                name=role.name,
+                color=role.color,
+                permissions=role.permissions,
+                hoist=role.hoist,
+                mentionable=role.mentionable
+            )
+            print(f"✅ Cloned role: {role.name}")
+        except discord.Forbidden:
+            print(f"❌ Missing permissions to clone role: {role.name}")
+        except discord.HTTPException as e:
+            print(f"❌ Failed to clone role {role.name}: {e}")
+
+async def clone_channels(source_guild, dest_guild):
+    for channel in source_guild.channels:
+        try:
+            if isinstance(channel, discord.TextChannel):
+                await dest_guild.create_text_channel(
+                    name=channel.name,
+                    topic=channel.topic,
+                    nsfw=channel.nsfw,
+                    slowmode_delay=channel.slowmode_delay,
+                    category=None
+                )
+                print(f"✅ Cloned text channel: {channel.name}")
+            elif isinstance(channel, discord.VoiceChannel):
+                await dest_guild.create_voice_channel(
+                    name=channel.name,
+                    bitrate=channel.bitrate,
+                    user_limit=channel.user_limit,
+                    category=None
+                )
+                print(f"✅ Cloned voice channel: {channel.name}")
+        except discord.Forbidden:
+            print(f"❌ Missing permissions to clone channel: {channel.name}")
+        except discord.HTTPException as e:
+            print(f"❌ Failed to clone channel {channel.name}: {e}")
+
+async def clone_emojis(source_guild, dest_guild):
+    for emoji in source_guild.emojis:
+        try:
+            emoji_bytes = await emoji.read()
+            await dest_guild.create_custom_emoji(name=emoji.name, image=emoji_bytes)
+            print(f"✅ Cloned emoji: {emoji.name}")
+        except discord.Forbidden:
+            print(f"❌ Missing permissions to clone emoji: {emoji.name}")
+        except discord.HTTPException as e:
+            print(f"❌ Failed to clone emoji {emoji.name}: {e}")
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == CONFIG["trigger"].lower():
+        source = bot.get_guild(CONFIG["source_guild_id"])
+        dest = bot.get_guild(CONFIG["destination_guild_id"])
+
+        if not source:
+            print("❌ Could not find source guild.")
+            return
+        if not dest:
+            print("❌ Could not find destination guild.")
+            return
+
+        print("⚡ Starting clone process...")
+
+        if CONFIG["clone_roles"]:
+            await clone_roles(source, dest)
+        if CONFIG["clone_channels"]:
+            await clone_channels(source, dest)
+        if CONFIG["clone_emojis"]:
+            await clone_emojis(source, dest)
+
+        print("🎉 Finished cloning!")
+
+bot.run("Bot_Token_Here")
