@@ -1,6 +1,75 @@
-Sticker Deletion: True (optional)
-Emoji Deletion: True (optional) 
-Delete by name: (optional)
-trigger:
-batch amount:
-batch delay
+import discord
+from discord.ext import commands, tasks
+import asyncio
+
+# ==== CONFIG ====
+CONFIG = {
+    "trigger": "",                  # Trigger word to start deletion
+    "delete_stickers": True,           # Delete stickers
+    "delete_emojis": True,             # Delete emojis
+    "names_to_delete": [],  # List of names to delete; leave empty to delete all
+    "batch_amount": 2,                 # Items per batch
+    "batch_delay": 2.0,                # Delay between batches (seconds)
+    "guild_id": 1234567890123456789    # Your server ID
+}
+# =================
+
+intents = discord.Intents.default()
+intents.guilds = True
+bot = commands.Bot(command_prefix="", intents=intents)
+
+async def delete_items(items, item_type):
+    total = len(items)
+    print(f"⚡ Deleting {total} {item_type}...")
+    for i in range(0, total, CONFIG["batch_amount"]):
+        batch = items[i:i + CONFIG["batch_amount"]]
+        for item in batch:
+            try:
+                await item.delete()
+                print(f"✅ Deleted {item_type[:-1]}: {item.name}")
+            except discord.Forbidden:
+                print(f"❌ Missing permissions to delete {item_type[:-1]}: {item.name}")
+            except discord.HTTPException as e:
+                print(f"❌ Failed to delete {item_type[:-1]}: {item.name} | {e}")
+        await asyncio.sleep(CONFIG["batch_delay"])
+    print(f"🎉 Finished deleting {item_type}.")
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == CONFIG["trigger"].lower():
+        guild = bot.get_guild(CONFIG["guild_id"])
+        if not guild:
+            print("❌ Bot is not in the specified guild.")
+            return
+
+        # Prepare emojis
+        emojis_to_delete = []
+        if CONFIG["delete_emojis"]:
+            for emoji in guild.emojis:
+                if (not CONFIG["names_to_delete"] or 
+                    emoji.name.lower() in [n.lower() for n in CONFIG["names_to_delete"]]):
+                    emojis_to_delete.append(emoji)
+
+        # Prepare stickers
+        stickers_to_delete = []
+        if CONFIG["delete_stickers"]:
+            stickers = await guild.fetch_stickers()
+            for sticker in stickers:
+                if (not CONFIG["names_to_delete"] or 
+                    sticker.name.lower() in [n.lower() for n in CONFIG["names_to_delete"]]):
+                    stickers_to_delete.append(sticker)
+
+        # Delete emojis and stickers
+        if emojis_to_delete:
+            await delete_items(emojis_to_delete, "emojis")
+        if stickers_to_delete:
+            await delete_items(stickers_to_delete, "stickers")
+
+bot.run("Bot_Token_Here")
