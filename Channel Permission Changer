@@ -1,0 +1,102 @@
+import discord
+from discord.ext import commands, tasks
+import asyncio
+
+# ==== CONFIG ====
+CONFIG = {
+    "guild_id": 1234567890,     # Server ID
+    "channel_ids": [],                    # List of channel IDs to apply permissions to; leave empty to apply all channels
+    "role_ids": [],                       # List of role IDs to modify permissions
+    "user_ids": [],                       # List of user IDs to modify permissions
+    "list_channels": True,                # If True, lists channels and their current permissions
+    "channel_permissions": {              # Permissions to set
+        # Text Permissions
+        "view_channel": True,
+        "send_messages": True,
+        "send_tts_messages": True,
+        "manage_messages": False,
+        "embed_links": True,
+        "attach_files": True,
+        "read_message_history": True,
+        "mention_everyone": False,
+        "use_external_emojis": True,
+        "add_reactions": True,
+        # Voice Permissions
+        "connect": True,
+        "speak": True,
+        "stream": True,
+        "use_voice_activation": True,
+        "priority_speaker": False,
+        "mute_members": False,
+        "deafen_members": False,
+        "move_members": False,
+        # Channel management
+        "manage_channels": False,
+        "manage_permissions": False,
+        "manage_webhooks": False,
+        "manage_threads": False,
+        "create_public_threads": True,
+        "create_private_threads": True,
+        "send_messages_in_threads": True
+    }
+}
+# =================
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+def get_target_channels(guild):
+    if CONFIG["channel_ids"]:
+        channels = [guild.get_channel(cid) for cid in CONFIG["channel_ids"] if guild.get_channel(cid)]
+    else:
+        channels = guild.channels
+    return channels
+
+def get_targets(guild):
+    roles = [guild.get_role(rid) for rid in CONFIG["role_ids"] if guild.get_role(rid)]
+    members = [guild.get_member(uid) for uid in CONFIG["user_ids"] if guild.get_member(uid)]
+    return roles + members
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == "permissions":  # Trigger
+        guild = bot.get_guild(CONFIG["guild_id"])
+        if not guild:
+            print("❌ Could not find the guild.")
+            return
+
+        channels = get_target_channels(guild)
+        targets = get_targets(guild)
+
+        # List channels if enabled
+        if CONFIG["list_channels"]:
+            print("⚡ Channels and current permissions:")
+            for ch in channels:
+                perms = ch.overwrites
+                print(f"- {ch.name} ({ch.id})")
+                for target, overwrite in perms.items():
+                    print(f"   > {target}: {overwrite}")
+
+        # Apply permissions
+        print("⚡ Applying permissions...")
+        for ch in channels:
+            for target in targets:
+                try:
+                    overwrite = discord.PermissionOverwrite(**CONFIG["channel_permissions"])
+                    await ch.set_permissions(target, overwrite=overwrite)
+                    print(f"✅ Set permissions for {target} in {ch.name}")
+                except Exception as e:
+                    print(f"❌ Failed to set permissions for {target} in {ch.name}: {e}")
+
+        print("🎉 Finished applying permissions.")
+
+bot.run("YOUR_BOT_TOKEN_HERE")
