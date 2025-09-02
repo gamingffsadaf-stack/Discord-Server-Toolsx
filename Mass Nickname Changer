@@ -1,4 +1,59 @@
-user ID: (optional)
-Nickname All: (Optional)
-batch amount:
-batch delay:
+import discord
+from discord.ext import commands
+import asyncio
+
+# ==== CONFIG ====
+CONFIG = {
+    "guild_id": 1234567890123456789,  # Replace with your server (guild) ID
+    "user_id": None,         # Optional: specific user ID
+    "nickname_all": True,    # True = change all members
+    "batch_amount": 4,  # Members per batch
+    "batch_delay": 2.0, # Delay between batches (seconds)
+    "nickname": "",     # The nickname to set
+    "revert": False     # True = remove everyone's nickname
+}
+# ===============
+
+intents = discord.Intents.default()
+intents.members = True  # Required for nickname changes
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    action = "Reverting nicknames" if CONFIG["revert"] else f"Setting nickname to '{CONFIG['nickname']}'"
+    print(f"⚡ {action}...")
+
+    guild = bot.get_guild(CONFIG["guild_id"])
+    if not guild:
+        print("❌ Bot is not in the specified guild.")
+        return
+
+    members = []
+
+    if CONFIG["user_id"]:
+        member = guild.get_member(CONFIG["user_id"])
+        if member:
+            members = [member]
+    elif CONFIG["nickname_all"]:
+        members = guild.members
+
+    print(f"⚡ Target members: {len(members)}")
+
+    for i in range(0, len(members), CONFIG["batch_amount"]):
+        batch = members[i:i+CONFIG["batch_amount"]]
+        for member in batch:
+            try:
+                if CONFIG["revert"]:
+                    await member.edit(nick=None)
+                    print(f"✅ Reverted nickname for {member.display_name}")
+                else:
+                    await member.edit(nick=CONFIG["nickname"])
+                    print(f"✅ Changed nickname for {member.display_name}")
+            except Exception as e:
+                print(f"❌ Could not change nickname for {member.display_name}: {e}")
+        await asyncio.sleep(CONFIG["batch_delay"])
+
+    print("🎉 Finished nickname changes.")
+
+bot.run("Bot_Token_Here")
