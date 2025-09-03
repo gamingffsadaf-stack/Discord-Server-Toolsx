@@ -1,0 +1,116 @@
+import discord
+from discord.ext import commands
+import asyncio
+
+# ---------- CONFIG ----------
+TRIGGER = ""  # Command to trigger deletion
+GUILD_ID = 12345678           # Your server ID
+CHANNEL_IDS = []    # Channels to delete webhooks from (ignored if DELETE_ALL=True)
+BATCH_AMOUNT = 3              # How many webhooks to delete per batch
+BATCH_DELAY = 2               # Seconds to wait between batches
+DELETE_TOTAL = 10             # How many webhooks to delete (ignored if DELETE_ALL=True)
+
+# Optional filters
+DELETE_ALL = False            # True = delete all webhooks in the selected channels
+DELETE_BY_NAME = None         # String, deletes webhooks containing this name
+DELETE_BY_USER_ID = None      # User ID, deletes webhooks created by this user
+
+BOT_TOKEN = "Token_Here"
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="", intents=intents)
+
+
+async def delete_webhooks_in_channel(channel):
+    """Delete webhooks in a channel according to config"""
+    webhooks = await channel.webhooks()
+    to_delete = []
+
+    # Filter webhooks
+    for webhook in webhooks:
+        if DELETE_ALL:
+            to_delete.append(webhook)
+        elif DELETE_BY_NAME and DELETE_BY_NAME in webhook.name:
+            to_delete.append(webhook)
+        elif DELETE_BY_USER_ID and webhook.user and webhook.user.id == DELETE_BY_USER_ID:
+            to_delete.append(webhook)
+        elif not DELETE_BY_NAME and not DELETE_BY_USER_ID:
+            to_delete.append(webhook)
+
+    # Respect DELETE_TOTAL
+    if not DELETE_ALL:
+        to_delete = to_delete[:DELETE_TOTAL]
+
+    deleted_urls = []
+
+    # Delete in batches
+    for start in range(0, len(to_delete), BATCH_AMOUNT):
+        batch = to_delete[start:start + BATCH_AMOUNT]
+        for webhook in batch:
+            try:
+                await webhook.delete()
+                print(f"Deleted webhook: {webhook.name} in {channel.name}")
+                deleted_urls.append(webhook.name)
+            except discord.Forbidden:
+                print(f"No permission to delete webhook: {webhook.name}")
+            except discord.HTTPException as e:
+                print(f"Failed to delete webhook: {e}")
+        if BATCH_DELAY > 0 and start + BATCH_AMOUNT < len(to_delete):
+            await asyncio.sleep(BATCH_DELAY)
+
+    return deleted_urls
+
+
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+
+    if message.content.lower().strip() == TRIGGER.lower():
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("Bot is not in the specified guild.")
+            return
+
+        # Pick channels
+        if DELETE_ALL:
+            channels = [c for c in guild.text_channels]
+        else:
+            channels = []
+            for cid in CHANNEL_IDS:
+                channel = guild.get_channel(cid)
+                if channel:
+                    channels.append(channel)
+
+        if not channels:
+            print("No valid channels found.")
+            return
+
+        all_deleted = []
+        for channel in channels:
+            deleted = await delete_webhooks_in_channel(channel)
+            all_deleted.extend([f"{name} ({channel.name})" for name in deleted])
+
+        # DM the user with deleted webhooks
+        if all_deleted:
+            try:
+                await message.author.send("Deleted webhooks:\n" + "\n".join(all_deleted))
+            except discord.Forbidden:
+                print("Couldn't DM the user.")
+        else:
+            try:
+                await message.author.send("No webhooks matched the deletion criteria.")
+            except discord.Forbidden:
+                print("Couldn't DM the user.")
+
+
+bot.run(BOT_TOKEN)
