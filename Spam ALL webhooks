@@ -1,1 +1,63 @@
-wip
+import discord
+from discord.ext import commands, tasks
+import asyncio
+
+# ================= CONFIG =================
+BOT_TOKEN = "BOT_TOKEN_HERE"
+GUILD_ID = 123456789123456789        # Target server
+CHANNEL_IDS = []                      # Optional: list of channels to filter; empty = all
+SEND_ALL_WEBHOOKS = True              # Send through all webhooks found
+LOOP = True                           # Infinite loop
+NUM_CHANNELS = 3                       # Messages per batch
+BATCH_DELAY = 5                        # Seconds to wait between batches
+BATCH_AMOUNT = 5                        # Ignored if LOOP=True
+MESSAGE_CONTENT = "@everyone, this is a test message"
+# ==========================================
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.messages = True
+intents.message_content = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+@bot.event
+async def on_ready():
+    print(f"Bot online as {bot.user}")
+    send_messages.start()  # Start the loop task
+
+async def fetch_webhooks():
+    guild = bot.get_guild(GUILD_ID)
+    if not guild:
+        print("❌ Guild not found")
+        return []
+
+    webhooks = await guild.webhooks()
+    if CHANNEL_IDS:
+        webhooks = [w for w in webhooks if w.channel.id in CHANNEL_IDS]
+
+    return webhooks
+
+@tasks.loop(seconds=BATCH_DELAY)
+async def send_messages():
+    batch_count = 0
+    webhooks = await fetch_webhooks()
+    if not webhooks:
+        print("❌ No webhooks found in the server.")
+        return
+
+    while LOOP or batch_count < BATCH_AMOUNT:
+        for w in webhooks:
+            for _ in range(NUM_CHANNELS):
+                try:
+                    await w.send(MESSAGE_CONTENT)
+                    print(f"[+] Sent message through webhook: {w.name} ({w.url})")
+                except discord.Forbidden:
+                    print(f"❌ Missing permission for webhook {w.name}")
+                except discord.HTTPException as e:
+                    print(f"[!] Error sending via {w.name}: {e}")
+
+        batch_count += 1
+        print(f"Batch {batch_count} sent. Waiting {BATCH_DELAY}s...")
+        await asyncio.sleep(BATCH_DELAY)
+
+bot.run(BOT_TOKEN)
