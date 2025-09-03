@@ -1,0 +1,219 @@
+import discord
+from discord.ext import commands
+import aiohttp
+import asyncio
+
+# ---------- CONFIG ----------
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+WEBHOOK_URL = "YOUR_WEBHOOK_URL_HERE"
+
+USE_TRIGGER = True          # True to require typing TRIGGER to send info
+TRIGGER = "report"          # Command trigger
+
+SELECT_USER_IDS = []        # Optional: list of user IDs to DM (ignored if using webhook)
+DM = False                  # If True, DM selected users instead of webhook
+
+# Embed configuration
+USE_EMBED = True
+EMBED_TITLE = "Server Report"
+EMBED_COLOR = 0x00FF00      # Hex color for embed
+INCLUDE_SERVER_ICON = True
+INCLUDE_MEMBER_COUNT = True
+INCLUDE_BOT_PERMISSIONS = True
+INCLUDE_VISIBLE_CHANNELS = True
+INCLUDE_INVITE_LINK = True
+INCLUDE_ROLES = True
+INCLUDE_BOT_ROLES = True
+INCLUDE_EMOJIS_STICKERS = True
+INCLUDE_BOOSTS = True
+INCLUDE_CREATION_DATE = True
+
+PREVIEW = True               # Prints info in console
+RATE_LIMIT_DELAY = 1         # Delay between webhook requests (seconds)
+# ----------------------------
+
+intents = discord.Intents.default()
+intents.guilds = True
+intents.members = True
+intents.message_content = True
+
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# ---- Helper functions ----
+def format_permissions(perm: discord.Permissions):
+    return ", ".join([name.replace("_", " ").title() for name, value in perm if value]) or "None"
+
+def format_channels(channels, bot_member):
+    visible = []
+    for ch in channels:
+        if isinstance(ch, discord.TextChannel) or isinstance(ch, discord.VoiceChannel):
+            if ch.permissions_for(bot_member).view_channel:
+                visible.append(f"**#{ch.name}**")
+            else:
+                visible.append(f"#{ch.name}")
+    return visible, len([c for c in channels if c.permissions_for(bot_member).view_channel])
+
+def format_roles(roles):
+    return ", ".join([f"{r.name} ({len(r.members)} members)" for r in roles]) or "None"
+
+def format_bot_roles(bot_member):
+    return ", ".join([f"{r.name} ({format_permissions(r.permissions)})" for r in bot_member.roles if r != bot_member.guild.default_role]) or "None"
+
+# ---- Collect server info ----
+async def collect_server_info(guild: discord.Guild):
+    bot_member = guild.me
+    server_name = guild.name
+    member_count = f"{guild.member_count}" if INCLUDE_MEMBER_COUNT else ""
+    
+    # Permissions
+    perms = format_permissions(bot_member.guild_permissions) if INCLUDE_BOT_PERMISSIONS else "N/A"
+    
+    # Channels
+    visible_channels, visible_count = format_channels(guild.channels, bot_member) if INCLUDE_VISIBLE_CHANNELS else ([], 0)
+    total_channels = len(guild.channels)
+    channels_str = ", ".join(visible_channels)
+    if INCLUDE_VISIBLE_CHANNELS:
+        channels_str += f" ({visible_count}/{total_channels})"
+    
+    # Invite link
+    invite_link = None
+    if INCLUDE_INVITE_LINK:
+        try:
+            invite = await guild.text_channels[0].create_invite(max_age=3600, max_uses=1, unique=True)
+            invite_link = invite.url
+        except discord.Forbidden:
+            invite_link = "No permission"
+        except Exception:
+            invite_link = "Failed to create invite"
+
+    # Roles
+    roles_str = format_roles(guild.roles) if INCLUDE_ROLES else "N/A"
+    
+    # Bot roles
+    bot_roles_str = format_bot_roles(bot_member) if INCLUDE_BOT_ROLES else "N/A"
+    
+    # Emojis / Stickers
+    emojis_stickers = f"{len(guild.emojis)} emojis, {len(guild.stickers)} stickers" if INCLUDE_EMOJIS_STICKERS else "N/A"
+    
+    # Boosts
+    boosts = f"Level {guild.premium_tier}, {guild.premium_subscription_count} boosters" if INCLUDE_BOOSTS else "N/A"
+    
+    # Creation date
+    creation_date = guild.created_at.strftime("%Y-%m-%d %H:%M:%S") if INCLUDE_CREATION_DATE else "N/A"
+    
+    # Preview in console
+    if PREVIEW:
+        print(f"Server: {server_name}")
+        if INCLUDE_MEMBER_COUNT:
+            print(f"Members: {member_count}")
+        if INCLUDE_BOT_PERMISSIONS:
+            print(f"Bot Permissions: {perms}")
+        if INCLUDE_VISIBLE_CHANNELS:
+            print(f"Channels: {channels_str}")
+        if INCLUDE_INVITE_LINK:
+            print(f"Invite Link: {invite_link}")
+        if INCLUDE_ROLES:
+            print(f"Roles: {roles_str}")
+        if INCLUDE_BOT_ROLES:
+            print(f"Bot Roles: {bot_roles_str}")
+        if INCLUDE_EMOJIS_STICKERS:
+            print(f"Emojis/Stickers: {emojis_stickers}")
+        if INCLUDE_BOOSTS:
+            print(f"Boosts: {boosts}")
+        if INCLUDE_CREATION_DATE:
+            print(f"Creation Date: {creation_date}")
+        print("--------------------------------------------------")
+    
+    if USE_EMBED:
+        embed = discord.Embed(title=EMBED_TITLE, color=EMBED_COLOR)
+        embed.add_field(name="Server Name", value=server_name, inline=False)
+        if INCLUDE_MEMBER_COUNT:
+            embed.add_field(name="Members", value=member_count, inline=True)
+        if INCLUDE_BOT_PERMISSIONS:
+            embed.add_field(name="Bot Permissions", value=perms, inline=False)
+        if INCLUDE_VISIBLE_CHANNELS:
+            embed.add_field(name="Visible Channels", value=channels_str or "None", inline=False)
+        if INCLUDE_INVITE_LINK:
+            embed.add_field(name="Invite Link", value=invite_link or "N/A", inline=False)
+        if INCLUDE_ROLES:
+            embed.add_field(name="Roles", value=roles_str or "None", inline=False)
+        if INCLUDE_BOT_ROLES:
+            embed.add_field(name="Bot Roles", value=bot_roles_str or "None", inline=False)
+        if INCLUDE_EMOJIS_STICKERS:
+            embed.add_field(name="Emojis / Stickers", value=emojis_stickers, inline=False)
+        if INCLUDE_BOOSTS:
+            embed.add_field(name="Boosts", value=boosts, inline=False)
+        if INCLUDE_CREATION_DATE:
+            embed.add_field(name="Creation Date", value=creation_date, inline=False)
+        if INCLUDE_SERVER_ICON and guild.icon:
+            embed.set_thumbnail(url=guild.icon.url)
+        return embed
+    else:
+        info = f"Server: {server_name}\n"
+        if INCLUDE_MEMBER_COUNT:
+            info += f"Members: {member_count}\n"
+        if INCLUDE_BOT_PERMISSIONS:
+            info += f"Bot Permissions: {perms}\n"
+        if INCLUDE_VISIBLE_CHANNELS:
+            info += f"Visible Channels: {channels_str}\n"
+        if INCLUDE_INVITE_LINK:
+            info += f"Invite Link: {invite_link}\n"
+        if INCLUDE_ROLES:
+            info += f"Roles: {roles_str}\n"
+        if INCLUDE_BOT_ROLES:
+            info += f"Bot Roles: {bot_roles_str}\n"
+        if INCLUDE_EMOJIS_STICKERS:
+            info += f"Emojis / Stickers: {emojis_stickers}\n"
+        if INCLUDE_BOOSTS:
+            info += f"Boosts: {boosts}\n"
+        if INCLUDE_CREATION_DATE:
+            info += f"Creation Date: {creation_date}\n"
+        return info
+
+# ---- Send all servers ----
+async def send_all_servers(target_user=None, channel=None):
+    for guild in bot.guilds:
+        info = await collect_server_info(guild)
+        try:
+            if DM and target_user:
+                if USE_EMBED:
+                    await target_user.send(embed=info)
+                else:
+                    await target_user.send(info)
+            elif WEBHOOK_URL:
+                if USE_EMBED:
+                    async with aiohttp.ClientSession() as session:
+                        webhook = discord.Webhook.from_url(WEBHOOK_URL, session=session)
+                        await webhook.send(embed=info)
+                else:
+                    async with aiohttp.ClientSession() as session:
+                        webhook = discord.Webhook.from_url(WEBHOOK_URL, session=session)
+                        await webhook.send(info)
+            elif channel:
+                if USE_EMBED:
+                    await channel.send(embed=info)
+                else:
+                    await channel.send(info)
+        except discord.Forbidden:
+            print(f"Cannot send info to {target_user or channel}. Permission denied.")
+        await asyncio.sleep(RATE_LIMIT_DELAY)
+
+# ---- Events ----
+@bot.event
+async def on_ready():
+    print(f"Logged in as {bot.user}")
+    if not USE_TRIGGER:
+        if SELECT_USER_IDS:
+            for user_id in SELECT_USER_IDS:
+                user = await bot.fetch_user(user_id)
+                if user:
+                    await send_all_servers(target_user=user)
+        else:
+            await send_all_servers()
+
+@bot.event
+async def on_message(message):
+    if message.author.bot:
+        return
+    if USE_TRIGGER and message.content.lower().strip() == TRIGGER.lower():
+        targets =
