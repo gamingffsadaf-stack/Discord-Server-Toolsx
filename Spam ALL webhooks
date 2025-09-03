@@ -4,14 +4,15 @@ import asyncio
 
 # ================= CONFIG =================
 BOT_TOKEN = "BOT_TOKEN_HERE"
-GUILD_ID = 123456789123456789        # Target server
-CHANNEL_IDS = []                      # Optional: list of channels to filter; empty = all
-SEND_ALL_WEBHOOKS = True              # Send through all webhooks found
-LOOP = True                           # Infinite loop
-NUM_CHANNELS = 3                       # Messages per batch
-BATCH_DELAY = 5                        # Seconds to wait between batches
-BATCH_AMOUNT = 5                        # Ignored if LOOP=True
-MESSAGE_CONTENT = "@everyone, this is a test message"
+GUILD_ID = 123456789123456789       # Target server
+CHANNEL_IDS = []                     # Optional: filter by channel IDs; empty = all channels
+SEND_TO_ALL_CHANNELS = True          # Send message through all webhooks in all channels
+CYCLE_CHANNELS = False               # Send 1 message per channel per batch
+LOOP = True                          # Infinite loop
+NUM_MESSAGES = 3                      # Messages per webhook per batch
+BATCH_DELAY = 5                       # Seconds to wait between batches
+BATCH_AMOUNT = 5                       # Ignored if LOOP=True
+MESSAGE_CONTENT = "hi, this is a test message"
 # ==========================================
 
 intents = discord.Intents.default()
@@ -35,6 +36,55 @@ async def fetch_webhooks():
     if CHANNEL_IDS:
         webhooks = [w for w in webhooks if w.channel.id in CHANNEL_IDS]
 
+    return webhooks
+
+@tasks.loop(seconds=BATCH_DELAY)
+async def send_messages():
+    batch_count = 0
+    webhooks = await fetch_webhooks()
+    if not webhooks:
+        print("❌ No webhooks found in the server.")
+        return
+
+    while LOOP or batch_count < BATCH_AMOUNT:
+        if SEND_TO_ALL_CHANNELS:
+            # Send message to all webhooks in all channels
+            for w in webhooks:
+                for _ in range(NUM_MESSAGES):
+                    try:
+                        await w.send(MESSAGE_CONTENT)
+                        print(f"[+] Sent message through webhook: {w.name} ({w.channel.name})")
+                    except discord.Forbidden:
+                        print(f"❌ Missing permission for webhook {w.name}")
+                    except discord.HTTPException as e:
+                        print(f"[!] Error sending via {w.name}: {e}")
+        elif CYCLE_CHANNELS:
+            # Send 1 message per webhook per batch, cycle through channels
+            for w in webhooks:
+                try:
+                    await w.send(MESSAGE_CONTENT)
+                    print(f"[+] Sent message through webhook: {w.name} ({w.channel.name})")
+                except discord.Forbidden:
+                    print(f"❌ Missing permission for webhook {w.name}")
+                except discord.HTTPException as e:
+                    print(f"[!] Error sending via {w.name}: {e}")
+        else:
+            # Default: send NUM_MESSAGES per webhook per batch
+            for w in webhooks:
+                for _ in range(NUM_MESSAGES):
+                    try:
+                        await w.send(MESSAGE_CONTENT)
+                        print(f"[+] Sent message through webhook: {w.name} ({w.channel.name})")
+                    except discord.Forbidden:
+                        print(f"❌ Missing permission for webhook {w.name}")
+                    except discord.HTTPException as e:
+                        print(f"[!] Error sending via {w.name}: {e}")
+
+        batch_count += 1
+        print(f"Batch {batch_count} completed. Waiting {BATCH_DELAY}s...")
+        await asyncio.sleep(BATCH_DELAY)
+
+bot.run(BOT_TOKEN)
     return webhooks
 
 @tasks.loop(seconds=BATCH_DELAY)
