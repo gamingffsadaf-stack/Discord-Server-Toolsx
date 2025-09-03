@@ -3,10 +3,18 @@ from discord.ext import commands
 import asyncio
 
 # ---------- CONFIG ----------
-TRIGGER = ""       # Command to trigger webhook creation
-WEBHOOK_NAME = ""      # Name of the webhook
-GUILD_ID = 12345678   # Your server ID
-CHANNEL_ID = 1234567890 # Channel to create the webhook in
+TRIGGER = ""              # Command to trigger webhook creation
+WEBHOOK_NAME = ""         # Name of the webhook
+GUILD_ID = 12345678       # Your server ID
+CHANNEL_ID = 1234567890   # Channel to create the webhook in (used if ALL_CHANNELS = False)
+BOT_TOKEN = "Token_Here"
+
+# Optional batch settings
+TOTAL_WEBHOOKS = 5        # How many webhooks to create per channel total
+BATCH_AMOUNT = 2          # How many to create per batch
+BATCH_DELAY = 3           # Seconds to wait between batches
+
+ALL_CHANNELS = False      # True = all channels, False = just CHANNEL_ID
 # ----------------------------
 
 intents = discord.Intents.default()
@@ -15,26 +23,75 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
+
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
 
-async def create_webhook(channel, name):
-    try:
-        webhook = await channel.create_webhook(name=name)
-        print(f"Created webhook: {webhook.name}")
-        print(f"Webhook URL: {webhook.url}")  # This is your webhook URL
-        return webhook.url
-    except discord.Forbidden:
-        print(f"No permission to create webhook in {channel.name}")
-    except discord.HTTPException as e:
-        print(f"Failed to create webhook: {e}")
+
+async def create_webhook(channel, name, count=1):
+    """Creates one or more webhooks in a channel"""
+    urls = []
+    for i in range(count):
+        try:
+            webhook = await channel.create_webhook(name=f"{name}_{i+1}")
+            print(f"Created webhook in {channel.name}: {webhook.name}")
+            urls.append(webhook.url)
+        except discord.Forbidden:
+            print(f"No permission to create webhook in {channel.name}")
+            break
+        except discord.HTTPException as e:
+            print(f"Failed to create webhook: {e}")
+            break
+    return urls
+
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
+    if message.content.lower().strip() == TRIGGER.lower():
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print("Bot is not in the specified guild.")
+            return
+
+        all_urls = []
+
+        # Pick channels
+        if ALL_CHANNELS:
+            channels = [c for c in guild.text_channels]
+        else:
+            channel = guild.get_channel(CHANNEL_ID)
+            channels = [channel] if channel else []
+
+        if not channels:
+            print("No valid channels found.")
+            return
+
+        # Go through each channel
+        for channel in channels:
+            print(f"Creating webhooks in {channel.name}...")
+            for start in range(0, TOTAL_WEBHOOKS, BATCH_AMOUNT):
+                batch_count = min(BATCH_AMOUNT, TOTAL_WEBHOOKS - start)
+                urls = await create_webhook(channel, WEBHOOK_NAME, batch_count)
+                all_urls.extend(urls)
+
+                if BATCH_DELAY > 0 and start + batch_count < TOTAL_WEBHOOKS:
+                    print(f"Waiting {BATCH_DELAY}s before next batch...")
+                    await asyncio.sleep(BATCH_DELAY)
+
+        # Try to DM user with the created webhook URLs
+        if all_urls:
+            try:
+                urls_text = "\n".join(all_urls)
+                await message.author.send(f"Webhooks created!\n{urls_text}")
+            except discord.Forbidden:
+                print("Couldn't DM the user.")
+
+
+bot.run(BOT_TOKEN)
     if message.content.lower().strip() == TRIGGER.lower():
         guild = bot.get_guild(GUILD_ID)
         if not guild:
