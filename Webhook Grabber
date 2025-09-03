@@ -1,1 +1,86 @@
-wip
+import discord
+from discord.ext import commands
+
+# ================= CONFIG =================
+SEND_DM = True
+DM_USER_IDS = []  # List of user IDs to DM
+GUILD_ID = 1234567890123456789      # Only grab webhooks from this guild
+GRAB_BY_NAME = None                  # e.g. "MyWebhook" (optional: set to None to disable)
+GRAB_ALL = True
+SHOW_AMOUNT = True
+SHOW_NAMES = True
+SHOW_CREATION_DATE = True
+SHOW_CHANNEL = True
+SHOW_CREATED_BY = True
+SHOW_CREATED_BY_ID = True
+SHOW_GUILD_ID = True
+SHOW_URL = True                      # Show webhook URL
+SAY_IN_LOGS = False
+MAX_MESSAGE_LENGTH = 1900
+# -------------------------------------------
+
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+
+intents = discord.Intents.default()
+intents.guilds = True
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+def format_webhook_info(webhooks, guild):
+    """Formats webhook info with markdown styling."""
+    output = []
+
+    if SHOW_GUILD_ID:
+        output.append(f"# Guild ID: `{guild.id}`")
+    if SHOW_AMOUNT:
+        output.append(f"## Total Webhooks Found: `{len(webhooks)}`")
+
+    for w in webhooks:
+        info = []
+        if SHOW_NAMES: info.append(f"**Name:** `{w.name}`")
+        if SHOW_URL: info.append(f"**URL:** `{w.url}`")
+        if SHOW_CREATION_DATE: info.append(f"**Created at:** `{w.created_at}`")
+        if SHOW_CHANNEL: info.append(f"**Channel:** `{w.channel.name}` (ID: `{w.channel.id}`)")
+        if SHOW_CREATED_BY: info.append(f"**Created by:** `{w.user}`")
+        if SHOW_CREATED_BY_ID: info.append(f"**Creator ID:** `{w.user.id}`")
+        output.append("\n".join(info))
+        output.append("---")  # separator between webhooks
+
+    return "\n".join(output)
+
+@bot.event
+async def on_ready():
+    print(f"Bot online as {bot.user}")
+
+    if SEND_DM:
+        guild = bot.get_guild(GUILD_ID)
+        if not guild:
+            print(f"❌ Guild {GUILD_ID} not found or bot not in guild.")
+            return
+
+        webhooks = await guild.webhooks()
+        if GRAB_BY_NAME:
+            webhooks = [w for w in webhooks if w.name == GRAB_BY_NAME]
+
+        if not webhooks:
+            print("❌ No webhooks found to send.")
+            return
+
+        final_message = format_webhook_info(webhooks, guild)
+
+        if SAY_IN_LOGS:
+            print(final_message)
+
+        for uid in DM_USER_IDS:
+            try:
+                user = await bot.fetch_user(uid)
+                # Split long messages
+                chunks = [final_message[i:i+MAX_MESSAGE_LENGTH] for i in range(0, len(final_message), MAX_MESSAGE_LENGTH)]
+                for chunk in chunks:
+                    await user.send(chunk)
+                print(f"✅ Webhook info sent to user {uid}")
+            except discord.Forbidden:
+                print(f"❌ Could not DM user {uid}. Check their DM settings.")
+            except Exception as e:
+                print(f"❌ Error sending DM to {uid}: {e}")
+
+bot.run(BOT_TOKEN)
