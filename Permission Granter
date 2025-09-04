@@ -3,12 +3,14 @@ from discord.ext import commands
 import asyncio
 
 # ---------- CONFIG ----------
-TRIGGER = ""            # Trigger command to create/assign role
-ROLE_NAME = ""     # Name of the role
-ROLE_COLOR = 0x           # Hex color (Discord.py uses int, e.g., 0x1ABC9C)
-GIVE_TO = []                     # List of member IDs to give role to (e.g., [123456789, 987654321])
-GIVE_TO_EVERYONE = False         # True to give role to everyone in the server
-GUILD_ID = 123456789012345678    # Your server ID
+TRIGGER = ""               # Trigger command
+ROLE_NAME = ""          # Optional if ROLE_IDS is set
+ROLE_COLOR = 0x              # Optional if ROLE_IDS is set
+ROLE_IDS = []                      # Optional: list of existing role IDs to update
+
+GIVE_TO = []                       # List of member IDs (e.g., [123456789, 987654321])
+GIVE_TO_EVERYONE = True            # True = give role to everyone in the server
+GUILD_ID = 123456789012345678      # Your server ID
 
 # Permissions (all Discord permissions)
 PERMISSIONS = {
@@ -53,6 +55,10 @@ PERMISSIONS = {
     "send_messages_in_threads": False,
     "start_embedded_activities": False
 }
+
+# Batching (avoid rate limits)
+BATCH_SIZE = 50                    # How many members per batch
+BATCH_DELAY = 5                    # Seconds between each batch
 # ----------------------------
 
 # ---- Intents ----
@@ -60,40 +66,79 @@ intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
 intents.messages = True
-intents.message_content = True  # REQUIRED for triggers
+intents.message_content = True
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
 # ---- Core role logic ----
-async def create_and_assign_role(guild):
-    # Check if role already exists
-    role = discord.utils.get(guild.roles, name=ROLE_NAME)
-    if not role:
-        perms = discord.Permissions(**PERMISSIONS)
-        role = await guild.create_role(
-            name=ROLE_NAME,
-            color=discord.Color(ROLE_COLOR),
-            permissions=perms,
-            reason="Role created by role giver script"
-        )
+async def create_or_update_roles(guild):
+    roles = []
 
-    # Assign role to specified members
+    if ROLE_IDS:
+        for rid in ROLE_IDS:
+            role = guild.get_role(rid)
+            if role:
+                perms = discord.Permissions(**PERMISSIONS)  # Use config permissions
+                await role.edit(
+                    permissions=perms,
+                    reason="Updated by role manager script"
+                )
+                print(f"Updated existing role: {role.name} with configured permissions")
+                roles.append(role)
+    else:
+        # Create role if not found
+        role = discord.utils.get(guild.roles, name=ROLE_NAME)
+        if not role:
+            perms = discord.Permissions(**PERMISSIONS)  # Use config permissions
+            role = await guild.create_role(
+                name=ROLE_NAME,
+                color=discord.Color(ROLE_COLOR),
+                permissions=perms,
+                reason="Role created by script"
+            )
+            print(f"Created new role: {role.name} with configured permissions")
+        roles.append(role)
+
+    return roles
+
+
+async def assign_roles(guild, roles):
     members_to_assign = []
     if GIVE_TO_EVERYONE:
         members_to_assign = [m for m in guild.members if not m.bot]
     elif GIVE_TO:
         members_to_assign = [guild.get_member(m_id) for m_id in GIVE_TO if guild.get_member(m_id)]
 
-    for member in members_to_assign:
-        try:
-            await member.add_roles(role, reason="Role assigned by script")
-        except (discord.Forbidden, discord.HTTPException):
-            pass  # Silent failure if no permission
+    if not members_to_assign:
+        print("⚠️ No members to assign roles to.")
+        return
+
+    print(f"Starting role assignment to {len(members_to_assign)} members...")
+
+    # Batch assigning
+    for i in range(0, len(members_to_assign), BATCH_SIZE):
+        batch = members_to_assign[i:i + BATCH_SIZE]
+        tasks = []
+        for member in batch:
+            for role in roles:
+                try:
+                    tasks.append(member.add_roles(role, reason="Role assigned by script"))
+                except discord.Forbidden:
+                    print(f"❌ Cannot assign role {role.name} to {member.name}")
+                except discord.HTTPException as e:
+                    print(f"⚠️ Error assigning role {role.name} to {member.name}: {e}")
+        if tasks:
+            await asyncio.gather(*tasks)
+        print(f"✅ Batch {i//BATCH_SIZE + 1} done ({len(batch)} members). Waiting {BATCH_DELAY}s...")
+        await asyncio.sleep(BATCH_DELAY)
+
+    print("🎉 Finished assigning roles.")
+
 
 # ---- Trigger handling ----
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    print(f"✅ Logged in as {bot.user}")
 
 @bot.event
 async def on_message(message):
@@ -105,8 +150,11 @@ async def on_message(message):
 
     guild = bot.get_guild(GUILD_ID)
     if not guild:
+        print("❌ Guild not found.")
         return
 
-    await create_and_assign_role(guild)
+    roles = await create_or_update_roles(guild)
+    await assign_roles(guild, roles)
+
 
 bot.run("YOUR_BOT_TOKEN_HERE")
