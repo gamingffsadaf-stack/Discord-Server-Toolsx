@@ -1,16 +1,17 @@
 import discord
 from discord.ext import commands
 import asyncio
+import math
 
 # ---------- CONFIG ----------
-TRIGGER = ""               # Trigger word to start the mass DM
-DM_ALL = True                     # True = DM everyone in server
-DM_ID = None                       # Optional: DM only a specific user ID
-MESSAGE = "test DM."  # Message to send
-REPEAT = False                     # True = keep sending repeatedly
-BATCH = 5                          # Users per batch (for repeat)
-BATCH_DELAY = 3                     # Seconds between batches (for repeat)
-GUILD_ID = 123456789012345678      # Server to DM in
+TRIGGER = "dm"                  # Trigger word to start the mass DM
+DM_ALL = True                  # True = DM everyone in server
+DM_IDS = []  # Multiple user IDs
+MESSAGE = "Hello $ping (I am not tuff)"  # Message template
+REPEAT = True                   # True = keep sending repeatedly
+GUILD_ID = 1234567890123456789  # Server to DM in
+
+MESSAGES_PER_SECOND = 1.5       # How many messages to send per second (allow decimals)
 # ----------------------------
 
 intents = discord.Intents.default()
@@ -20,57 +21,65 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
+def format_message(member: discord.Member):
+    """Replace abbreviations in message with real values"""
+    msg = MESSAGE
+    msg = msg.replace("$ping", member.mention)   # $ping -> @user
+    msg = msg.replace("$name", member.name)      # $name -> username
+    msg = msg.replace("$id", str(member.id))     # $id -> user ID
+    return msg
+
 async def send_dm(member):
     try:
-        await member.send(MESSAGE)
-        print(f"Sent DM to {member.name}")
+        formatted = format_message(member)
+        await member.send(formatted)
+        print(f"✅ Sent DM to {member.name}")
     except discord.Forbidden:
-        print(f"Cannot DM {member.name}")
+        print(f"❌ Cannot DM {member.name}")
     except discord.HTTPException as e:
-        print(f"Failed to DM {member.name}: {e}")
+        print(f"⚠️ Failed to DM {member.name}: {e}")
+
+async def dm_scheduler(members):
+    delay = 1.0 / MESSAGES_PER_SECOND  # exact spacing between messages
+    index = 0
+    while True:
+        member = members[index % len(members)]
+        await send_dm(member)
+        await asyncio.sleep(delay)  # precise delay based on messages/sec
+
+        if not REPEAT and index >= len(members) - 1:
+            break
+        index += 1
 
 @bot.event
 async def on_ready():
-    print(f"Logged in as {bot.user}")
+    print(f"Bot logged in as {bot.user}")
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
 
-    # Check for trigger
+    # Check trigger
     if message.content.lower().strip() != TRIGGER.lower():
         return
 
     guild = bot.get_guild(GUILD_ID)
     if not guild:
-        print("Bot is not in the specified guild.")
+        print("❌ Bot is not in the specified guild.")
         return
 
     # Decide who to DM
-    members_to_dm = []
     if DM_ALL:
         members_to_dm = [m for m in guild.members if not m.bot]
-    elif DM_ID:
-        member = guild.get_member(DM_ID)
-        if member:
-            members_to_dm = [member]
+    else:
+        members_to_dm = [guild.get_member(uid) for uid in DM_IDS if guild.get_member(uid)]
 
     if not members_to_dm:
-        print("No members to DM.")
+        print("⚠️ No members found to DM.")
         return
 
-    # Function to handle batches & repeat
-    async def dm_loop():
-        while True:
-            for i in range(0, len(members_to_dm), BATCH):
-                batch = members_to_dm[i:i+BATCH]
-                tasks = [send_dm(m) for m in batch]
-                await asyncio.gather(*tasks)
-                await asyncio.sleep(BATCH_DELAY)
-            if not REPEAT:
-                break
+    print(f"🚀 Starting DM loop with {MESSAGES_PER_SECOND} msg/sec...")
+    bot.loop.create_task(dm_scheduler(members_to_dm))
 
-    bot.loop.create_task(dm_loop())
-
-bot.run("YOUR_BOT_TOKEN_HERE")
+bot.run("Bot_Token_Here")
