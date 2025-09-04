@@ -1,67 +1,60 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import asyncio
 
-# ---------- CONFIG ----------
-TRIGGER = ""               # Trigger command
-ROLE_NAME = ""          # Optional if ROLE_IDS is set
-ROLE_COLOR = 0x              # Optional if ROLE_IDS is set
-ROLE_IDS = []                      # Optional: list of existing role IDs to update
-
-GIVE_TO = []                       # List of member IDs (e.g., [123456789, 987654321])
-GIVE_TO_EVERYONE = True            # True = give role to everyone in the server
-GUILD_ID = 123456789012345678      # Your server ID
-
-# Permissions (all Discord permissions)
-PERMISSIONS = {
-    "create_instant_invite": False,
-    "kick_members": False,
-    "ban_members": False,
-    "administrator": False,
-    "manage_channels": False,
-    "manage_guild": False,
-    "add_reactions": False,
-    "view_audit_log": False,
-    "priority_speaker": False,
-    "stream": False,
-    "view_channel": False,
-    "send_messages": False,
-    "send_tts_messages": False,
-    "manage_messages": False,
-    "embed_links": False,
-    "attach_files": False,
-    "read_message_history": False,
-    "mention_everyone": False,
-    "use_external_emojis": False,
-    "view_guild_insights": False,
-    "connect": False,
-    "speak": False,
-    "mute_members": False,
-    "deafen_members": False,
-    "move_members": False,
-    "use_voice_activation": False,
-    "change_nickname": False,
-    "manage_nicknames": False,
-    "manage_roles": False,
-    "manage_webhooks": False,
-    "manage_emojis": False,
-    "use_application_commands": False,
+# ---------------- CONFIG ----------------
+TRIGGER = ""                 # Trigger command to assign/create role
+ROLE_NAME = ""              # Optional: used if creating a new role
+ROLE_COLOR = 0xFFFFF                # Optional: color for new role
+EXISTING_ROLE_IDS = []               # Optional: list of existing role IDs to update
+GUILD_ID = 1234567890123456789        # Your server ID
+ASSIGN_TO = []                        # List of member IDs to assign role to
+ASSIGN_TO_EVERYONE = False            # True = assign role to everyone
+BATCH_AMOUNT = 5                       # Number of members per batch
+BATCH_DELAY = 2.0                      # Seconds to wait between batches
+PERMISSIONS = {                        # Valid Discord permissions only
+    "create_instant_invite": True,
+    "kick_members": True,
+    "ban_members": True,
+    "administrator": True,
+    "manage_channels": True,
+    "manage_guild": True,
+    "add_reactions": True,
+    "view_audit_log": True,
+    "priority_speaker": True,
+    "stream": True,
+    "view_channel": True,
+    "send_messages": True,
+    "send_tts_messages": True,
+    "manage_messages": True,
+    "embed_links": True,
+    "attach_files": True,
+    "read_message_history": True,
+    "mention_everyone": True,
+    "use_external_emojis": True,
+    "view_guild_insights": True,
+    "connect": True,
+    "speak": True,
+    "mute_members": True,
+    "deafen_members": True,
+    "move_members": True,
+    "use_voice_activation": True,
+    "change_nickname": True,
+    "manage_nicknames": True,
+    "manage_roles": True,
+    "manage_webhooks": True,
+    "manage_emojis": True,
+    "use_application_commands": True,
     "request_to_speak": True,
-    "manage_events": False,
-    "manage_threads": False,
-    "create_public_threads": False,
-    "create_private_threads": False,
-    "use_external_stickers": False,
-    "send_messages_in_threads": False,
-    "start_embedded_activities": False
+    "manage_events": True,
+    "manage_threads": True,
+    "create_public_threads": True,
+    "create_private_threads": True,
+    "use_external_stickers": True,
+    "send_messages_in_threads": True
 }
+# -----------------------------------------
 
-# Batching (avoid rate limits)
-BATCH_SIZE = 50                    # How many members per batch
-BATCH_DELAY = 5                    # Seconds between each batch
-# ----------------------------
-
-# ---- Intents ----
 intents = discord.Intents.default()
 intents.guilds = True
 intents.members = True
@@ -70,91 +63,84 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix="", intents=intents)
 
-# ---- Core role logic ----
-async def create_or_update_roles(guild):
-    roles = []
 
-    if ROLE_IDS:
-        for rid in ROLE_IDS:
-            role = guild.get_role(rid)
-            if role:
-                perms = discord.Permissions(**PERMISSIONS)  # Use config permissions
-                await role.edit(
-                    permissions=perms,
-                    reason="Updated by role manager script"
-                )
-                print(f"Updated existing role: {role.name} with configured permissions")
-                roles.append(role)
-    else:
-        # Create role if not found
-        role = discord.utils.get(guild.roles, name=ROLE_NAME)
-        if not role:
-            perms = discord.Permissions(**PERMISSIONS)  # Use config permissions
+async def create_or_update_roles(guild):
+    roles_to_use = []
+
+    # Handle existing roles
+    for rid in EXISTING_ROLE_IDS:
+        role = guild.get_role(rid)
+        if role:
+            perms = discord.Permissions(**PERMISSIONS)
+            await role.edit(permissions=perms, reason="Updated by script")
+            roles_to_use.append(role)
+        else:
+            print(f"Role ID {rid} not found in guild.")
+
+    # Create new role if ROLE_NAME is set
+    if ROLE_NAME:
+        existing = discord.utils.get(guild.roles, name=ROLE_NAME)
+        if not existing:
+            perms = discord.Permissions(**PERMISSIONS)
             role = await guild.create_role(
                 name=ROLE_NAME,
                 color=discord.Color(ROLE_COLOR),
                 permissions=perms,
-                reason="Role created by script"
+                reason="Created by script"
             )
-            print(f"Created new role: {role.name} with configured permissions")
-        roles.append(role)
+            roles_to_use.append(role)
+        else:
+            roles_to_use.append(existing)
 
-    return roles
+    return roles_to_use
 
 
 async def assign_roles(guild, roles):
-    members_to_assign = []
-    if GIVE_TO_EVERYONE:
-        members_to_assign = [m for m in guild.members if not m.bot]
-    elif GIVE_TO:
-        members_to_assign = [guild.get_member(m_id) for m_id in GIVE_TO if guild.get_member(m_id)]
+    # Determine members to assign
+    members = []
+    if ASSIGN_TO_EVERYONE:
+        members = [m for m in guild.members if not m.bot]
+    elif ASSIGN_TO:
+        members = [guild.get_member(mid) for mid in ASSIGN_TO if guild.get_member(mid)]
 
-    if not members_to_assign:
-        print("⚠️ No members to assign roles to.")
+    if not members:
+        print("No members to assign roles to.")
         return
 
-    print(f"Starting role assignment to {len(members_to_assign)} members...")
-
-    # Batch assigning
-    for i in range(0, len(members_to_assign), BATCH_SIZE):
-        batch = members_to_assign[i:i + BATCH_SIZE]
-        tasks = []
+    # Batch assign roles
+    for i in range(0, len(members), BATCH_AMOUNT):
+        batch = members[i:i + BATCH_AMOUNT]
         for member in batch:
             for role in roles:
                 try:
-                    tasks.append(member.add_roles(role, reason="Role assigned by script"))
+                    await member.add_roles(role, reason="Assigned by script")
+                    print(f"Assigned {role.name} to {member.name}")
                 except discord.Forbidden:
-                    print(f"❌ Cannot assign role {role.name} to {member.name}")
+                    print(f"Missing permissions to assign {role.name} to {member.name}")
                 except discord.HTTPException as e:
-                    print(f"⚠️ Error assigning role {role.name} to {member.name}: {e}")
-        if tasks:
-            await asyncio.gather(*tasks)
-        print(f"✅ Batch {i//BATCH_SIZE + 1} done ({len(batch)} members). Waiting {BATCH_DELAY}s...")
+                    print(f"HTTP error assigning {role.name} to {member.name}: {e}")
         await asyncio.sleep(BATCH_DELAY)
 
-    print("🎉 Finished assigning roles.")
 
-
-# ---- Trigger handling ----
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+
 
 @bot.event
 async def on_message(message):
     if message.author.bot:
         return
-
     if message.content.lower().strip() != TRIGGER.lower():
         return
 
     guild = bot.get_guild(GUILD_ID)
     if not guild:
-        print("❌ Guild not found.")
+        print("Guild not found.")
         return
 
     roles = await create_or_update_roles(guild)
     await assign_roles(guild, roles)
 
 
-bot.run("YOUR_BOT_TOKEN_HERE")
+bot.run("BOT_TOKEN_HERE")
