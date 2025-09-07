@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
 import asyncio
-import math
 
 # ---------- CONFIG ----------
 TRIGGER = "dm"                  # Trigger word to start the mass DM
-DM_ALL = True                  # True = DM everyone in server
-DM_IDS = []  # Multiple user IDs
+DM_ALL = True                   # True = DM everyone in server
+DM_IDS = []                     # Multiple user IDs (if DM_ALL=False)
+IGNORE_IDS = []                 # Multiple user IDs to ignore
 MESSAGE = "Hello $ping (I am not tuff)"  # Message template
 REPEAT = True                   # True = keep sending repeatedly
 GUILD_ID = 1234567890123456789  # Server to DM in
@@ -71,9 +71,9 @@ async def on_message(message):
 
     # Decide who to DM
     if DM_ALL:
-        members_to_dm = [m for m in guild.members if not m.bot]
+        members_to_dm = [m for m in guild.members if not m.bot and m.id not in IGNORE_IDS]
     else:
-        members_to_dm = [guild.get_member(uid) for uid in DM_IDS if guild.get_member(uid)]
+        members_to_dm = [guild.get_member(uid) for uid in DM_IDS if guild.get_member(uid) and uid not in IGNORE_IDS]
 
     if not members_to_dm:
         print("⚠️ No members found to DM.")
