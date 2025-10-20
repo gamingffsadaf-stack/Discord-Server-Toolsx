@@ -3,10 +3,10 @@ from discord.ext import commands
 
 # ---------- CONFIG ----------
 WORD_TRIGGER = ""              # Example: "hello" (responds if this word appears)
-SENTENCE_TRIGGER = ""          # Example: "how are you?" (responds if message exactly matches)
+SENTENCE_TRIGGER = ""          # Example: "THIS SERVER HAS BEEN FUCKED BY SDF" (responds if message exactly matches)
 REPLY = True                     # True = reply to message, False = just send in channel
 RESPONSE = ""          # Message bot will send
-GUILD_ID = 1234567890    # Optional: restrict to a specific server
+GUILD_ID = 1429653858191413311    # Optional: restrict to a specific server
 # ----------------------------
 
 intents = discord.Intents.default()
@@ -49,4 +49,4 @@ async def on_message(message):
         except discord.HTTPException as e:
             print(f"Failed to send message: {e}")
 
-bot.run("Bot_Token_Here")
+bot.run("MTQyOTQ4NTU4Njc0MTQ2MTE0Mg.GyGmbN.NQfGnOTL5NycWiok3wRrSKCD2Gsw1Sm_GVg3XU")
