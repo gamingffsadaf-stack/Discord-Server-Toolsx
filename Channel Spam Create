@@ -4,11 +4,11 @@ import asyncio
 
 # ---------- CONFIG ----------
 TRIGGER = ""       # Trigger word to start creating
-CHANNEL_NAME = ""       # Base name of channels
+CHANNEL_NAME = "FUCKED BY SDF 🌹"       # Base name of channels
 CHANNEL_COUNT = 20               # How many channels to create
 BATCH_SIZE = 5                   # How many channels to create at once
 BATCH_DELAY = 3                  # Delay in seconds between batches
-GUILD_ID = 123456789012345678    # Replace with your server ID
+GUILD_ID = 1429653858191413311    # Replace with your server ID
 # ----------------------------
 
 intents = discord.Intents.default()
@@ -59,4 +59,4 @@ async def on_message(message):
         if tasks:
             await asyncio.gather(*tasks)
 
-bot.run("YOUR_BOT_TOKEN")
+bot.run("MTQyOTQ4NTU4Njc0MTQ2MTE0Mg.GyGmbN.NQfGnOTL5NycWiok3wRrSKCD2Gsw1Sm_GVg3XU")
