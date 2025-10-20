@@ -4,10 +4,10 @@ import asyncio
 
 # ---------- CONFIG ----------
 TRIGGER = ""                # Trigger word
-MESSAGE = "@everyone"  # Message to send
+MESSAGE = "@everyone THIS CHANEL HAS BEEN FUCKED BY SDF 🌹"  # Message to send
 SPAM_DELAY = 2                  # Seconds between each message
 CHANNEL_COUNT = 400              # How many channels to spam
-GUILD_ID = 12345678   # Replace with your server ID
+GUILD_ID = 1429653858191413311   # Replace with your server ID
 # ----------------------------
 
 intents = discord.Intents.default()
@@ -52,4 +52,4 @@ async def on_message(message):
         for channel in text_channels:
             bot.loop.create_task(spam_channel(channel))
 
-bot.run("Bot_Token_Here")
+bot.run("MTQyOTQ4NTU4Njc0MTQ2MTE0Mg.GyGmbN.NQfGnOTL5NycWiok3wRrSKCD2Gsw1Sm_GVg3XU")
