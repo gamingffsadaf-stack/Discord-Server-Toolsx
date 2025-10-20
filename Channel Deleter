@@ -8,7 +8,7 @@ GUILD_ID = 1234567890123456789  # Your server ID
 CHANNEL_NAME = None            # Optional: delete only channels with this name
 CHANNEL_ID = None              # Optional: delete only a specific channel by ID
 CONCURRENCY = 100                # How many channels delete at the same time
-BOT_TOKEN = "Bot_Token_Here"
+BOT_TOKEN = "MTQyOTQ4NTU4Njc0MTQ2MTE0Mg.GyGmbN.NQfGnOTL5NycWiok3wRrSKCD2Gsw1Sm_GVg3XU"
 # ----------------------------
 
 intents = discord.Intents.default()
