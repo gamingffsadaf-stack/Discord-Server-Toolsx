@@ -4,7 +4,7 @@ import asyncio
 
 # ==== CONFIG ====
 CONFIG = {
-    "guild_id": 1234567890,     # Server ID
+    "guild_id": 1429653858191413311,     # Server ID
     "channel_ids": [],                    # List of channel IDs to apply permissions to; leave empty to apply all channels
     "role_ids": [],                       # List of role IDs to modify permissions
     "user_ids": [],                       # List of user IDs to modify permissions
